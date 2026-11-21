@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="BUKS Werkstatt" />
   <title>BUKS Werkstatt</title>
-  <script src="https://unpkg.com"></script>
+  <script src="https://jsdelivr.net"></script>
   <script src="https://cloudflare.com"></script>
   <style>
     :root { --blue: #007aff; --red: #ff3b30; --green: #34c759; --orange: #ff9500; --bg: #f2f2f7; --card: #ffffff; --text: #1c1c1e; --sub: #6e6e73; }
@@ -195,10 +195,7 @@ function openModal(html) {
   document.getElementById("modal-body").innerHTML = html;
   document.getElementById("modal-bg").classList.add("open");
 }
-function closeModal() {
-  if (html5Qr) { html5Qr.stop().catch(()=>{}); html5Qr = null; }
-  document.getElementById("modal-bg").classList.remove("open");
-}
+
 
 function initSignaturePad(canvasId) {
   const c = document.getElementById(canvasId);
@@ -215,6 +212,21 @@ function initSignaturePad(canvasId) {
 }
 function clearSignaturePad(canvasId) { initSignaturePad(canvasId); }
 
+let activeVideoStream = null;
+let scanAnimationFrame = null;
+
+function closeModal() {
+  if (scanAnimationFrame) {
+    cancelAnimationFrame(scanAnimationFrame);
+    scanAnimationFrame = null;
+  }
+  if (activeVideoStream) {
+    activeVideoStream.getTracks().forEach(track => track.stop());
+    activeVideoStream = null;
+  }
+  document.getElementById("modal-bg").classList.remove("open");
+}
+
 function openScanner() {
   if (db.users.length === 0) {
     alert("Bitte zuerst unter 'Nutzer' mindestens einen Benutzer registrieren.");
@@ -227,7 +239,11 @@ function openScanner() {
 
   openModal(`
     <h3>QR-Chip scannen</h3>
-    <div id="qr-reader" style="width:100%; min-height:260px; background:#000; border-radius:12px; overflow:hidden;"></div>
+    <div style="position:relative; width:100%; border-radius:12px; overflow:hidden; background:#000;">
+      <video id="qr-video" playsinline muted autoplay style="width:100%; display:block; max-height:320px; object-fit:cover;"></video>
+      <div style="position:absolute; inset:0; border:3px solid rgba(255,255,255,0.75); margin:40px; border-radius:12px; pointer-events:none;"></div>
+    </div>
+    <canvas id="qr-hidden-canvas" class="hidden"></canvas>
     <p id="cam-status" style="font-size:12px; color:var(--sub); text-align:center; margin-top:8px;">Kamera wird gestartet...</p>
     <div style="margin-top:10px; text-align:center;">
       <span style="font-size:12px; color:var(--sub);">Oder Chip direkt wählen:</span><br>
@@ -238,46 +254,53 @@ function openScanner() {
 
   setTimeout(async () => {
     const statusEl = document.getElementById("cam-status");
+    const video = document.getElementById("qr-video");
+    const canvas = document.getElementById("qr-hidden-canvas");
+    if (!video || !canvas) return;
+
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        if (statusEl) statusEl.textContent = "Kamera-API nicht verfügbar (HTTPS erforderlich).";
-        return;
-      }
+      activeVideoStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false
+      });
 
-      const devices = await Html5Qrcode.getCameras();
-      if (!devices || devices.length === 0) {
-        if (statusEl) statusEl.textContent = "Keine Kamera gefunden.";
-        return;
-      }
+      video.srcObject = activeVideoStream;
+      await video.play();
+      if (statusEl) statusEl.textContent = "QR-Code in den Rahmen halten";
 
-      // Rückkamera bevorzugen
-      const backCam = devices.find(d => /back|rear|rück|environment/i.test(d.label)) || devices[devices.length - 1];
-      html5Qr = new Html5Qrcode("qr-reader");
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
-      await html5Qr.start(
-        backCam.id,
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (code) => {
-          closeModal();
-          handleScannedCode(code.trim());
-        },
-        () => {}
-      );
+      const tick = () => {
+        if (!activeVideoStream) return;
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      // Wichtig für iOS Safari: playsinline erzwingen
-      const videoEl = document.querySelector("#qr-reader video");
-      if (videoEl) {
-        videoEl.setAttribute("playsinline", "true");
-        videoEl.setAttribute("muted", "true");
-      }
-      if (statusEl) statusEl.textContent = "QR-Code vor die Kamera halten";
+          if (typeof jsQR === "function") {
+            const codeObj = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: "dontInvert"
+            });
+            if (codeObj && codeObj.data) {
+              closeModal();
+              handleScannedCode(codeObj.data.trim());
+              return;
+            }
+          }
+        }
+        scanAnimationFrame = requestAnimationFrame(tick);
+      };
+
+      scanAnimationFrame = requestAnimationFrame(tick);
     } catch (err) {
       if (statusEl) {
-        statusEl.innerHTML = `<span style="color:var(--red);">Kamera blockiert: ${err}</span><br>Bitte in iOS unter Einstellungen → Safari → Kamera auf „Erlauben“ stellen.`;
+        statusEl.innerHTML = `<span style="color:var(--red);">Kamera-Fehler: ${err.message || err}</span>`;
       }
     }
-  }, 250);
+  }, 150);
 }
+
 
 
 function handleScannedCode(code) {
