@@ -1,0 +1,619 @@
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="BUKS Werkstatt" />
+  <title>BUKS Werkstatt</title>
+  <script src="https://unpkg.com"></script>
+  <script src="https://cloudflare.com"></script>
+  <style>
+    :root { --blue: #007aff; --red: #ff3b30; --green: #34c759; --orange: #ff9500; --bg: #f2f2f7; --card: #ffffff; --text: #1c1c1e; --sub: #6e6e73; }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; background: var(--bg); color: var(--text); padding-bottom: 85px; }
+    header { background: var(--card); padding: 16px 20px; border-bottom: 1px solid #e5e5ea; position: sticky; top: 0; z-index: 10; }
+    header h1 { margin: 0; font-size: 26px; font-weight: 800; }
+    .container { padding: 16px; max-width: 720px; margin: 0 auto; }
+    .card { background: var(--card); border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+    .card h2 { margin: 0 0 12px 0; font-size: 16px; color: var(--sub); text-transform: uppercase; letter-spacing: 0.4px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; background: var(--blue); color: #fff; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-red { background: var(--red); }
+    .btn-green { background: var(--green); }
+    .btn-outline { background: transparent; border: 1.5px solid var(--blue); color: var(--blue); }
+    .btn-sm { width: auto; padding: 8px 12px; font-size: 13px; border-radius: 8px; }
+    input, select, textarea { width: 100%; padding: 12px; border: 1px solid #d1d1d6; border-radius: 10px; font-size: 16px; margin-bottom: 10px; background: #fff; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--sub); }
+    .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f5; gap: 10px; }
+    .row:last-child { border-bottom: none; }
+    .badge { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .b-blue { background: #e5f1ff; color: var(--blue); }
+    .b-orange { background: #fff3e0; color: var(--orange); }
+    .b-red { background: #ffe5e5; color: var(--red); }
+    .b-green { background: #e6f8ec; color: var(--green); }
+    nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid #d1d1d6; display: flex; justify-content: space-around; padding: 8px 0 20px 0; z-index: 20; }
+    nav.tabs button { background: none; border: none; color: var(--sub); font-size: 11px; font-weight: 600; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+    nav.tabs button.active { color: var(--blue); }
+    nav.tabs button span.ico { font-size: 20px; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: flex-end; justify-content: center; z-index: 50; }
+    .modal-bg.open { display: flex; }
+    .modal { background: var(--card); width: 100%; max-width: 680px; max-height: 92vh; overflow-y: auto; border-radius: 20px 20px 0 0; padding: 20px; }
+    canvas.sig-pad { border: 1.5px solid #c7c7cc; border-radius: 12px; background: #fff; width: 100%; height: 150px; touch-action: none; display: block; }
+    .hidden { display: none !important; }
+    @media print {
+      body * { visibility: hidden; }
+      #print-area, #print-area * { visibility: visible; }
+      #print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+    }
+  </style>
+</head>
+
+
+<body>
+  <header><h1 id="page-title">BUKS Werkstatt</h1></header>
+
+  <!-- TAB 1: BETRIEB & SCAN -->
+  <main id="tab-scan" class="container">
+    <div class="card">
+      <button class="btn" onclick="openScanner()">📷 QR-Chip zum Anmelden scannen</button>
+    </div>
+    <div class="card">
+      <h2>Aktive Belegungen (<span id="active-count">0</span>)</h2>
+      <div id="active-list"></div>
+    </div>
+    <div class="card">
+      <h2>Abgeschlossene Sitzungen</h2>
+      <div id="finished-list"></div>
+    </div>
+  </main>
+
+  <!-- TAB 2: NUTZER -->
+  <main id="tab-users" class="container hidden">
+    <div class="card">
+      <button class="btn" onclick="openNewUserModal()">➕ Neuen Nutzer registrieren</button>
+    </div>
+    <div class="card">
+      <h2>Registrierte Nutzer</h2>
+      <div id="users-list"></div>
+    </div>
+  </main>
+
+  <!-- TAB 3: ADMIN -->
+  <main id="tab-admin" class="container hidden">
+    <div id="admin-lock" class="card" style="text-align:center; padding:32px 16px;">
+      <div style="font-size:48px;">🔒</div>
+      <h3>Admin-Bereich geschützt</h3>
+      <p style="font-size:13px; color:var(--sub);">Bitte Admin-PIN eingeben (Standard: 1234)</p>
+      <input type="password" id="admin-pin-input" inputmode="numeric" placeholder="PIN" style="max-width:180px; text-align:center; font-size:20px;" />
+      <button class="btn" style="max-width:200px;" onclick="unlockAdmin()">Entsperren</button>
+    </div>
+
+    <div id="admin-content" class="hidden">
+      <div class="card">
+        <button class="btn btn-outline btn-sm" style="float:right;" onclick="lockAdmin()">🔒 Sperren</button>
+        <h2>Abrechnung & CSV-Export</h2>
+        <label>Zeitraum</label>
+        <select id="export-period" onchange="toggleCustomDates(); renderAdmin();">
+          <option value="currentMonth">Aktueller Monat</option>
+          <option value="lastMonth">Letzter Monat</option>
+          <option value="all">Alle Einträge</option>
+          <option value="custom">Eigener Zeitraum</option>
+        </select>
+        <div id="custom-dates" class="hidden">
+          <label>Von</label><input type="date" id="export-from" onchange="renderAdmin()" />
+          <label>Bis</label><input type="date" id="export-to" onchange="renderAdmin()" />
+        </div>
+        <p><strong id="admin-revenue">Umsatz: 0,00 €</strong></p>
+        <button class="btn btn-green" onclick="exportCSV()">📊 Excel-CSV herunterladen</button>
+      </div>
+
+      <div class="card">
+        <h2>Nutzer, Unterschriften & PDF-Akten</h2>
+        <button class="btn btn-outline" style="margin-bottom:12px;" onclick="printAllUsersPDF()">🖨️ Alle Nutzer-Akten als PDF drucken / sichern</button>
+        <div id="admin-users-list"></div>
+      </div>
+
+      <div class="card">
+        <h2>Texte & Ordnungen</h2>
+        <label>Nutzungsbedingungen (Registrierung)</label>
+        <textarea id="admin-terms-text" rows="3" onchange="saveTexts()"></textarea>
+        <label>Unterweisungstext (Maschinen)</label>
+        <textarea id="admin-inst-text" rows="3" onchange="saveTexts()"></textarea>
+      </div>
+
+      <div class="card">
+        <h2>QR-Chips / Leih-Tokens</h2>
+        <div id="admin-tokens-list"></div>
+        <button class="btn btn-outline" style="margin-top:10px;" onclick="createNewToken()">➕ Neuen QR-Chip generieren</button>
+      </div>
+
+      <div class="card">
+        <h2>Maschinen & Tarife</h2>
+        <div id="admin-machines-list"></div>
+        <button class="btn btn-outline" style="margin-top:10px;" onclick="openMachineModal(null)">➕ Neue Maschine hinzufügen</button>
+      </div>
+
+      <div class="card">
+        <h2>Datensicherung & PIN</h2>
+        <button class="btn btn-outline" style="margin-bottom:8px;" onclick="exportBackup()">💾 Komplettes JSON-Backup speichern</button>
+        <label>Backup-Datei (.json) wiederherstellen</label>
+        <input type="file" accept=".json" onchange="importBackup(event)" />
+        <button class="btn btn-outline" onclick="changeAdminPIN()">🔑 Admin-PIN ändern</button>
+      </div>
+    </div>
+  </main>
+
+  <nav class="tabs">
+    <button class="active" onclick="switchTab('scan', this)"><span class="ico">📷</span>Betrieb</button>
+    <button onclick="switchTab('users', this)"><span class="ico">👥</span>Nutzer</button>
+    <button onclick="switchTab('admin', this)"><span class="ico">⚙️</span>Admin</button>
+  </nav>
+
+  <!-- UNIVERSAL MODAL -->
+  <div id="modal-bg" class="modal-bg" onclick="if(event.target===this) closeModal()">
+    <div class="modal" id="modal-body"></div>
+  </div>
+  <div id="print-area"></div>
+
+
+<script>
+const DEFAULT_DB = {
+  pin: "1234",
+  termsText: "Mit der Registrierung erkenne ich die Hallen- und Maschinenordnung von BUKS sowie die geltenden Tarife an.",
+  instructionText: "Ich bestätige hiermit, dass ich in die Bedienung, Sicherheitsvorschriften und Schutzmaßnahmen der oben genannten Maschine eingewiesen wurde.",
+  users: [],
+  tokens: [
+    { id: "t1", label: "Chip 01", code: "BUKS-CHIP-01" },
+    { id: "t2", label: "Chip 02", code: "BUKS-CHIP-02" }
+  ],
+  machines: [
+    { id: "m1", name: "Reine Hallennutzung", memberRate: 8, memberMin: 4, tenantRate: 15, tenantMin: 7.5, isHall: true, increment: 15 },
+    { id: "m2", name: "CNC-Fräse 1", memberRate: 25, memberMin: 10, tenantRate: 45, tenantMin: 15, isHall: false, increment: 15 },
+    { id: "m3", name: "Drehbank 2", memberRate: 20, memberMin: 5, tenantRate: 35, tenantMin: 10, isHall: false, increment: 15 },
+    { id: "m4", name: "Lasercutter", memberRate: 15, memberMin: 2, tenantRate: 28, tenantMin: 5, isHall: false, increment: 1 }
+  ],
+  instructions: [],
+  sessions: []
+};
+
+let db = JSON.parse(localStorage.getItem("buks_webapp_db") || "null") || structuredClone(DEFAULT_DB);
+function saveDB() { localStorage.setItem("buks_webapp_db", JSON.stringify(db)); renderAll(); }
+let html5Qr = null;
+
+function switchTab(tab, btn) {
+  document.querySelectorAll("main").forEach(m => m.classList.add("hidden"));
+  document.getElementById("tab-" + tab).classList.remove("hidden");
+  document.querySelectorAll("nav.tabs button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  renderAll();
+}
+
+function openModal(html) {
+  document.getElementById("modal-body").innerHTML = html;
+  document.getElementById("modal-bg").classList.add("open");
+}
+function closeModal() {
+  if (html5Qr) { html5Qr.stop().catch(()=>{}); html5Qr = null; }
+  document.getElementById("modal-bg").classList.remove("open");
+}
+
+function initSignaturePad(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext("2d");
+  c.width = c.offsetWidth * 2; c.height = 300;
+  ctx.scale(2, 2); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.offsetWidth, 150);
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+  let drawing = false; c.dataset.signed = "0";
+  const pos = e => { const r = c.getBoundingClientRect(); const t = e.touches ? e.touches : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; };
+  c.onpointerdown = e => { drawing = true; c.dataset.signed = "1"; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); };
+  c.onpointermove = e => { if (!drawing) return; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); };
+  c.onpointerup = () => drawing = false;
+}
+function clearSignaturePad(canvasId) { initSignaturePad(canvasId); }
+
+function openScanner() {
+  if (db.users.length === 0) { alert("Bitte zuerst unter 'Nutzer' mindestens einen Benutzer registrieren."); return; }
+  openModal(`<h3>QR-Chip scannen</h3><div id="qr-reader" style="width:100%;"></div><button class="btn btn-outline" style="margin-top:12px;" onclick="closeModal()">Abbrechen</button>`);
+  setTimeout(() => {
+    html5Qr = new Html5Qrcode("qr-reader");
+    html5Qr.start({ facingMode: "environment" }, { fps: 10, qrbox: 220 }, (code) => {
+      closeModal();
+      handleScannedCode(code.trim());
+    }).catch(err => alert("Kamera-Fehler (HTTPS erforderlich): " + err));
+  }, 150);
+}
+
+function handleScannedCode(code) {
+  const token = db.tokens.find(t => t.code === code);
+  if (!token) { alert("Unbekannter QR-Code: " + code); return; }
+  const busyMachineSession = db.sessions.find(s => !s.endTime && s.chipCode === code && !s.isHall);
+  if (busyMachineSession) { alert(`${token.label} ist noch an ${busyMachineSession.machineName} (${busyMachineSession.userName}) aktiv.`); return; }
+
+  const userOpts = db.users.map(u => `<option value="${u.id}">${u.firstName} ${u.lastName} (${u.group})</option>`).join("");
+  openModal(`
+    <h3>Anmeldung (${token.label})</h3>
+    <label>1. Registrierten Benutzer wählen</label>
+    <select id="book-user" onchange="renderBookingMachines('${token.id}')">${userOpts}</select>
+    <label>2. Maschine oder Halle wählen</label>
+    <div id="book-machines"></div>
+    <button class="btn btn-outline" style="margin-top:12px;" onclick="closeModal()">Abbrechen</button>
+  `);
+  renderBookingMachines(token.id);
+}
+
+function renderBookingMachines(tokenId) {
+  const uid = document.getElementById("book-user").value;
+  const user = db.users.find(u => u.id === uid);
+  const box = document.getElementById("book-machines");
+  box.innerHTML = db.machines.map(m => {
+    const occupied = !m.isHall && db.sessions.some(s => !s.endTime && s.machineId === m.id);
+    const hasInst = m.isHall || db.instructions.some(i => i.userId === user.id && i.machineId === m.id);
+    const rate = user.group === "Vereinsmitglied" ? m.memberRate : m.tenantRate;
+    return `<div class="row">
+      <div>
+        <strong>${m.name}</strong><br>
+        <span style="font-size:12px; color:var(--sub);">${rate.toFixed(2)} €/Std. • ${m.increment === 1 ? "Minutengenau" : m.increment + " Min.-Takt"}</span><br>
+        ${!m.isHall ? `<span style="font-size:11px; color:${hasInst ? 'var(--green)' : 'var(--orange)'};">${hasInst ? '✓ Unterwiesen' : '⚠ Einmalige Unterweisung nötig'}</span>` : ''}
+      </div>
+      ${occupied ? `<span class="badge b-red">Belegt</span>` : `<button class="btn btn-sm" onclick="selectMachineForStart('${tokenId}','${user.id}','${m.id}')">Starten</button>`}
+    </div>`;
+  }).join("");
+}
+
+function selectMachineForStart(tokenId, userId, machineId) {
+  const m = db.machines.find(x => x.id === machineId);
+  const hasInst = m.isHall || db.instructions.some(i => i.userId === userId && i.machineId === machineId);
+  if (hasInst) { startSession(tokenId, userId, machineId); closeModal(); return; }
+  const u = db.users.find(x => x.id === userId);
+  openModal(`
+    <h3>Unterweisung erforderlich</h3>
+    <p><strong>Nutzer:</strong> ${u.firstName} ${u.lastName}<br><strong>Maschine:</strong> ${m.name}</p>
+    <p style="font-size:13px; color:var(--sub);">${db.instructionText}</p>
+    <label><input type="checkbox" id="inst-check" style="width:auto;"> Unterweisung erhalten & verstanden</label>
+    <label>Unterschrift des Nutzers</label>
+    <canvas id="inst-canvas" class="sig-pad"></canvas>
+    <button class="btn btn-outline btn-sm" style="margin:6px 0 12px 0;" onclick="clearSignaturePad('inst-canvas')">Löschen</button>
+    <button class="btn" onclick="confirmInstruction('${tokenId}','${userId}','${machineId}')">Bestätigen & Arbeit starten</button>
+  `);
+  setTimeout(() => initSignaturePad("inst-canvas"), 50);
+}
+
+function confirmInstruction(tokenId, userId, machineId) {
+  const c = document.getElementById("inst-canvas");
+  if (!document.getElementById("inst-check").checked || c.dataset.signed !== "1") { alert("Bitte bestätigen und unterschreiben."); return; }
+  const m = db.machines.find(x => x.id === machineId);
+  db.instructions.push({ id: "i" + Date.now(), userId, machineId, machineName: m.name, signedAt: new Date().toISOString(), signature: c.toDataURL("image/png") });
+  startSession(tokenId, userId, machineId);
+  closeModal();
+}
+
+function startSession(tokenId, userId, machineId) {
+  const t = db.tokens.find(x => x.id === tokenId);
+  const u = db.users.find(x => x.id === userId);
+  const m = db.machines.find(x => x.id === machineId);
+  const rate = u.group === "Vereinsmitglied" ? m.memberRate : m.tenantRate;
+  const minC = u.group === "Vereinsmitglied" ? m.memberMin : m.tenantMin;
+  db.sessions.unshift({
+    id: "s" + Date.now(), chipCode: t.code, chipLabel: t.label, userId: u.id, userName: `${u.firstName} ${u.lastName}`,
+    userGroup: u.group, machineId: m.id, machineName: m.name, isHall: m.isHall, rate, minCharge: minC,
+    increment: m.increment, startTime: new Date().toISOString(), endTime: null, notes: ""
+  });
+  saveDB();
+}
+
+function openFinishModal(sessionId) {
+  const s = db.sessions.find(x => x.id === sessionId);
+  openModal(`
+    <h3>Arbeit beenden</h3>
+    <p><strong>${s.machineName}</strong> – ${s.userName}</p>
+    <label>Bemerkung / Defekt- & Verschleißmeldung (optional)</label>
+    <textarea id="finish-note" rows="3" placeholder="z. B. Sägeblatt stumpf, Defekt, gereinigt..."></textarea>
+    <button class="btn btn-red" onclick="finishSession('${s.id}')">Arbeit endgültig beenden</button>
+    <button class="btn btn-outline" style="margin-top:8px;" onclick="closeModal()">Abbrechen</button>
+  `);
+}
+
+function calcCost(s) {
+  const end = s.endTime ? new Date(s.endTime) : new Date();
+  const rawMin = Math.max(0, (end - new Date(s.startTime)) / 60000);
+  const billedMin = rawMin <= 0 ? 0 : (s.increment === 1 ? rawMin : Math.ceil(rawMin / s.increment) * s.increment);
+  const cost = Math.max(s.minCharge, (billedMin / 60) * s.rate);
+  return { rawMin, billedMin, cost };
+}
+
+function finishSession(sessionId) {
+  const s = db.sessions.find(x => x.id === sessionId);
+  s.notes = document.getElementById("finish-note").value.trim();
+  s.endTime = new Date().toISOString();
+  saveDB();
+  closeModal();
+  const c = calcCost(s);
+  alert(`Arbeit beendet!\nNutzer: ${s.userName}\nMaschine: ${s.machineName}\nAbgerechnet: ${Math.round(c.billedMin)} Min.\nKosten: ${c.cost.toFixed(2)} €`);
+}
+
+
+function openNewUserModal() {
+  openModal(`
+    <h3>Neuen Nutzer registrieren</h3>
+    <input id="u-first" placeholder="Vorname" />
+    <input id="u-last" placeholder="Nachname" />
+    <select id="u-group"><option value="Vereinsmitglied">Vereinsmitglied</option><option value="Mieter">Mieter</option></select>
+    <p style="font-size:12px; color:var(--sub);">${db.termsText}</p>
+    <label><input type="checkbox" id="u-terms" style="width:auto;"> Nutzungsbedingungen akzeptieren</label>
+    <label>Unterschrift</label>
+    <canvas id="u-canvas" class="sig-pad"></canvas>
+    <button class="btn btn-outline btn-sm" style="margin:6px 0 12px 0;" onclick="clearSignaturePad('u-canvas')">Löschen</button>
+    <button class="btn" onclick="saveNewUser()">Registrieren</button>
+  `);
+  setTimeout(() => initSignaturePad("u-canvas"), 50);
+}
+
+function saveNewUser() {
+  const first = document.getElementById("u-first").value.trim();
+  const last = document.getElementById("u-last").value.trim();
+  const c = document.getElementById("u-canvas");
+  if (!first || !last || !document.getElementById("u-terms").checked || c.dataset.signed !== "1") {
+    alert("Bitte alle Felder ausfüllen, Bedingungen akzeptieren und unterschreiben."); return;
+  }
+  db.users.push({ id: "u" + Date.now(), firstName: first, lastName: last, group: document.getElementById("u-group").value, createdAt: new Date().toISOString(), signature: c.toDataURL("image/png") });
+  saveDB(); closeModal();
+}
+
+function openUserReadOnly(userId) {
+  const u = db.users.find(x => x.id === userId);
+  const insts = db.instructions.filter(i => i.userId === userId);
+  openModal(`
+    <h3>${u.firstName} ${u.lastName}</h3>
+    <p>Tarifgruppe: <strong>${u.group}</strong><br>Registriert: ${new Date(u.createdAt).toLocaleDateString("de-DE")}</p>
+    <h4>Abgeschlossene Unterweisungen (${insts.length})</h4>
+    ${insts.length === 0 ? "<p style='color:var(--sub);'>Noch keine Unterweisung hinterlegt.</p>" : insts.map(i => `<div class="row"><div><strong>✓ ${i.machineName}</strong><br><span style="font-size:12px; color:var(--sub);">${new Date(i.signedAt).toLocaleString("de-DE")}</span></div></div>`).join("")}
+    <button class="btn" style="margin-top:14px;" onclick="closeModal()">Schließen</button>
+  `);
+}
+
+let adminUnlocked = false;
+function unlockAdmin() {
+  if (document.getElementById("admin-pin-input").value === db.pin) {
+    adminUnlocked = true; document.getElementById("admin-pin-input").value = "";
+    document.getElementById("admin-lock").classList.add("hidden");
+    document.getElementById("admin-content").classList.remove("hidden");
+    renderAdmin();
+  } else { alert("Falsche PIN"); }
+}
+function lockAdmin() {
+  adminUnlocked = false;
+  document.getElementById("admin-lock").classList.remove("hidden");
+  document.getElementById("admin-content").classList.add("hidden");
+}
+function changeAdminPIN() {
+  const p = prompt("Neue 4-stellige Admin-PIN eingeben:");
+  if (p && p.trim().length >= 4) { db.pin = p.trim(); saveDB(); alert("PIN geändert."); }
+}
+function saveTexts() {
+  db.termsText = document.getElementById("admin-terms-text").value;
+  db.instructionText = document.getElementById("admin-inst-text").value;
+  saveDB();
+}
+function toggleCustomDates() {
+  document.getElementById("custom-dates").classList.toggle("hidden", document.getElementById("export-period").value !== "custom");
+}
+function getFilteredSessions() {
+  const p = document.getElementById("export-period").value;
+  const now = new Date();
+  return db.sessions.filter(s => {
+    const d = new Date(s.startTime);
+    if (p === "currentMonth") return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    if (p === "lastMonth") { const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1); return d.getMonth() === lm.getMonth() && d.getFullYear() === lm.getFullYear(); }
+    if (p === "custom") {
+      const f = document.getElementById("export-from").value;
+      const t = document.getElementById("export-to").value;
+      if (f && d < new Date(f + "T00:00:00")) return false;
+      if (t && d > new Date(t + "T23:59:59")) return false;
+    }
+    return true;
+  });
+}
+
+function exportCSV() {
+  const list = getFilteredSessions();
+  let csv = "\uFEFFDatum;Nutzer;Tarifgruppe;Chip;Maschine;Start;Ende;Abgerechnet (Min);Stundensatz;Kosten (EUR);Bemerkung\n";
+  list.forEach(s => {
+    const c = calcCost(s);
+    csv += [
+      new Date(s.startTime).toLocaleDateString("de-DE"), s.userName, s.userGroup, s.chipLabel, s.machineName,
+      new Date(s.startTime).toLocaleTimeString("de-DE"), s.endTime ? new Date(s.endTime).toLocaleTimeString("de-DE") : "Läuft",
+      Math.round(c.billedMin), s.rate.toFixed(2).replace(".", ","), c.cost.toFixed(2).replace(".", ","),
+      `"${(s.notes || "").replace(/"/g, '""')}"`
+    ].join(";") + "\n";
+  });
+  downloadFile(csv, `BUKS_Abrechnung_${Date.now()}.csv`, "text/csv;charset=utf-8;");
+}
+
+function openAdminUserModal(userId) {
+  const u = db.users.find(x => x.id === userId);
+  const insts = db.instructions.filter(i => i.userId === userId);
+  openModal(`
+    <h3>Nutzer-Akte (Admin)</h3>
+    <input id="edit-u-first" value="${u.firstName}" />
+    <input id="edit-u-last" value="${u.lastName}" />
+    <select id="edit-u-group">
+      <option value="Vereinsmitglied" ${u.group === 'Vereinsmitglied' ? 'selected' : ''}>Vereinsmitglied</option>
+      <option value="Mieter" ${u.group === 'Mieter' ? 'selected' : ''}>Mieter</option>
+    </select>
+    <p><strong>Allgemeine Unterschrift:</strong></p>
+    ${u.signature ? `<img src="${u.signature}" style="max-width:220px; border:1px solid #ddd; border-radius:8px;">` : ''}
+    <h4>Unterweisungen (${insts.length})</h4>
+    ${insts.map(i => `<div style="margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:8px;">
+      <strong>${i.machineName}</strong> (${new Date(i.signedAt).toLocaleString("de-DE")})<br>
+      ${i.signature ? `<img src="${i.signature}" style="max-width:180px; border:1px solid #ddd; margin-top:4px;">` : ''}
+    </div>`).join("")}
+    <button class="btn" onclick="saveAdminUser('${u.id}')">Speichern</button>
+    <button class="btn btn-outline" style="margin-top:8px;" onclick="printSingleUserPDF('${u.id}')">🖨️ Einzel-Akte drucken / PDF</button>
+    <button class="btn btn-red" style="margin-top:8px;" onclick="deleteUser('${u.id}')">Nutzer löschen</button>
+  `);
+}
+
+function saveAdminUser(id) {
+  const u = db.users.find(x => x.id === id);
+  u.firstName = document.getElementById("edit-u-first").value.trim();
+  u.lastName = document.getElementById("edit-u-last").value.trim();
+  u.group = document.getElementById("edit-u-group").value;
+  saveDB(); closeModal();
+}
+function deleteUser(id) {
+  if (!confirm("Nutzer wirklich löschen?")) return;
+  db.users = db.users.filter(x => x.id !== id);
+  db.instructions = db.instructions.filter(x => x.userId !== id);
+  saveDB(); closeModal();
+}
+
+function buildUserPrintHTML(u) {
+  const insts = db.instructions.filter(i => i.userId === u.id);
+  return `<div style="page-break-after:always; font-family:sans-serif;">
+    <h2>BUKS Werkstatt – Nutzer-Akte & Unterweisungsnachweis</h2>
+    <p><strong>Name:</strong> ${u.firstName} ${u.lastName} | <strong>Tarif:</strong> ${u.group} | <strong>Registriert:</strong> ${new Date(u.createdAt).toLocaleDateString("de-DE")}</p>
+    <h4>1. Nutzungsbedingungen</h4><p style="font-size:12px;">${db.termsText}</p>
+    ${u.signature ? `<img src="${u.signature}" style="width:200px; border:1px solid #ccc;">` : ''}
+    <h4>2. Maschinen-Unterweisungen</h4><p style="font-size:12px;">${db.instructionText}</p>
+    ${insts.map(i => `<p><strong>• ${i.machineName}</strong> (${new Date(i.signedAt).toLocaleString("de-DE")})<br>${i.signature ? `<img src="${i.signature}" style="width:180px; border:1px solid #ccc;">` : ''}</p>`).join("")}
+  </div>`;
+}
+function printSingleUserPDF(id) {
+  const u = db.users.find(x => x.id === id);
+  document.getElementById("print-area").innerHTML = buildUserPrintHTML(u);
+  window.print();
+}
+function printAllUsersPDF() {
+  document.getElementById("print-area").innerHTML = db.users.map(buildUserPrintHTML).join("");
+  window.print();
+}
+
+function createNewToken() {
+  const label = prompt("Bezeichnung für QR-Chip:", `Chip ${db.tokens.length + 1}`);
+  if (!label) return;
+  const code = "BUKS-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+  db.tokens.push({ id: "t" + Date.now(), label: label.trim(), code });
+  saveDB();
+}
+function showTokenQR(id) {
+  const t = db.tokens.find(x => x.id === id);
+  openModal(`<h3>${t.label}</h3><div id="qr-gen" style="display:flex; justify-content:center; margin:16px 0;"></div><p style="text-align:center; font-family:monospace;">${t.code}</p><button class="btn" onclick="closeModal()">Fertig</button>`);
+  setTimeout(() => new QRCode(document.getElementById("qr-gen"), { text: t.code, width: 200, height: 200 }), 50);
+}
+
+function openMachineModal(id) {
+  const m = id ? db.machines.find(x => x.id === id) : { id: "", name: "", memberRate: 20, memberMin: 5, tenantRate: 35, tenantMin: 10, isHall: false, increment: 15 };
+  openModal(`
+    <h3>${id ? "Maschine bearbeiten" : "Neue Maschine"}</h3>
+    <input id="m-name" placeholder="Name" value="${m.name}" />
+    <label><input type="checkbox" id="m-hall" style="width:auto;" ${m.isHall ? "checked" : ""}> Mehrfachscan / Parallelnutzung (Halle)</label>
+    <label>Abrechnungstakt (Minuten)</label>
+    <select id="m-inc">
+      <option value="1" ${m.increment===1?'selected':''}>Minutengenau</option>
+      <option value="15" ${m.increment===15?'selected':''}>15-Minuten-Takt</option>
+      <option value="30" ${m.increment===30?'selected':''}>30-Minuten-Takt</option>
+      <option value="60" ${m.increment===60?'selected':''}>60-Minuten-Takt</option>
+    </select>
+    <label>Stundensatz Mitglied (€) / Mindestbetrag (€)</label>
+    <div style="display:flex; gap:8px;"><input id="m-mr" type="number" step="0.5" value="${m.memberRate}"><input id="m-mm" type="number" step="0.5" value="${m.memberMin}"></div>
+    <label>Stundensatz Mieter (€) / Mindestbetrag (€)</label>
+    <div style="display:flex; gap:8px;"><input id="m-tr" type="number" step="0.5" value="${m.tenantRate}"><input id="m-tm" type="number" step="0.5" value="${m.tenantMin}"></div>
+    <button class="btn" onclick="saveMachine('${id || ''}')">Speichern</button>
+  `);
+}
+
+function saveMachine(id) {
+  const obj = {
+    id: id || "m" + Date.now(), name: document.getElementById("m-name").value.trim(),
+    isHall: document.getElementById("m-hall").checked, increment: Number(document.getElementById("m-inc").value),
+    memberRate: Number(document.getElementById("m-mr").value), memberMin: Number(document.getElementById("m-mm").value),
+    tenantRate: Number(document.getElementById("m-tr").value), tenantMin: Number(document.getElementById("m-tm").value)
+  };
+  if (!obj.name) return;
+  if (id) { const idx = db.machines.findIndex(x => x.id === id); db.machines[idx] = obj; } else { db.machines.push(obj); }
+  saveDB(); closeModal();
+}
+
+function exportBackup() {
+  downloadFile(JSON.stringify(db, null, 2), `BUKS_Backup_${Date.now()}.json`, "application/json");
+}
+
+function importBackup(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => { try { db = JSON.parse(r.result); saveDB(); alert("Backup wiederhergestellt!"); } catch { alert("Ungültige Backup-Datei."); } };
+  r.readAsText(file);
+}
+
+function downloadFile(content, filename, type) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = filename;
+  a.click();
+}
+
+
+function renderAll() {
+  const active = db.sessions.filter(s => !s.endTime);
+  const finished = db.sessions.filter(s => s.endTime);
+  document.getElementById("active-count").textContent = active.length;
+  document.getElementById("active-list").innerHTML = active.length === 0 ? "<p style='color:var(--sub);'>Keine aktive Nutzung</p>" : active.map(s => `
+    <div class="row">
+      <div><strong>${s.machineName} – ${s.userName}</strong><br><span style="font-size:12px; color:var(--sub);">${s.chipLabel} • Start: ${new Date(s.startTime).toLocaleTimeString("de-DE", {hour:'2-digit', minute:'2-digit'})}</span></div>
+      <button class="btn btn-red btn-sm" onclick="openFinishModal('${s.id}')">Beenden</button>
+    </div>`).join("");
+
+  document.getElementById("finished-list").innerHTML = finished.slice(0, 15).map(s => {
+    const c = calcCost(s);
+    return `<div class="row">
+      <div><strong>${s.machineName} (${s.userName})</strong><br><span style="font-size:12px; color:var(--sub);">Abgerechnet: ${Math.round(c.billedMin)} Min.</span>${s.notes ? `<br><span style="font-size:12px; color:var(--orange);">Bemerkung: ${s.notes}</span>` : ''}</div>
+      <strong style="color:var(--blue);">${c.cost.toFixed(2)} €</strong>
+    </div>`;
+  }).join("");
+
+  document.getElementById("users-list").innerHTML = db.users.map(u => `
+    <div class="row" style="cursor:pointer;" onclick="openUserReadOnly('${u.id}')">
+      <div><strong>${u.firstName} ${u.lastName}</strong><br><span style="font-size:12px; color:var(--sub);">${db.instructions.filter(i => i.userId === u.id).length} Unterweisung(en)</span></div>
+      <span class="badge ${u.group === 'Vereinsmitglied' ? 'b-blue' : 'b-orange'}">${u.group}</span>
+    </div>`).join("");
+
+  if (adminUnlocked) renderAdmin();
+}
+
+function renderAdmin() {
+  document.getElementById("admin-terms-text").value = db.termsText;
+  document.getElementById("admin-inst-text").value = db.instructionText;
+  const f = getFilteredSessions().filter(s => s.endTime);
+  const rev = f.reduce((sum, s) => sum + calcCost(s).cost, 0);
+  document.getElementById("admin-revenue").textContent = `Umsatz im Zeitraum (${f.length} Sitzungen): ${rev.toFixed(2)} €`;
+
+  document.getElementById("admin-users-list").innerHTML = db.users.map(u => `
+    <div class="row" style="cursor:pointer;" onclick="openAdminUserModal('${u.id}')">
+      <div><strong>${u.firstName} ${u.lastName}</strong><br><span style="font-size:12px; color:var(--sub);">${u.group}</span></div>
+      <span>📄 ✏️</span>
+    </div>`).join("");
+
+  document.getElementById("admin-tokens-list").innerHTML = db.tokens.map(t => `
+    <div class="row" style="cursor:pointer;" onclick="showTokenQR('${t.id}')">
+      <div><strong>${t.label}</strong><br><span style="font-size:12px; color:var(--sub);">${t.code}</span></div>
+      <span>🏁</span>
+    </div>`).join("");
+
+  document.getElementById("admin-machines-list").innerHTML = db.machines.map(m => `
+    <div class="row" style="cursor:pointer;" onclick="openMachineModal('${m.id}')">
+      <div><strong>${m.name}</strong><br><span style="font-size:12px; color:var(--sub);">Mitglied: ${m.memberRate}€ | Mieter: ${m.tenantRate}€</span></div>
+      <span>✏️</span>
+    </div>`).join("");
+}
+
+renderAll();
+</script>
+</body>
+</html>
+
+
