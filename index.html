@@ -216,16 +216,69 @@ function initSignaturePad(canvasId) {
 function clearSignaturePad(canvasId) { initSignaturePad(canvasId); }
 
 function openScanner() {
-  if (db.users.length === 0) { alert("Bitte zuerst unter 'Nutzer' mindestens einen Benutzer registrieren."); return; }
-  openModal(`<h3>QR-Chip scannen</h3><div id="qr-reader" style="width:100%;"></div><button class="btn btn-outline" style="margin-top:12px;" onclick="closeModal()">Abbrechen</button>`);
-  setTimeout(() => {
-    html5Qr = new Html5Qrcode("qr-reader");
-    html5Qr.start({ facingMode: "environment" }, { fps: 10, qrbox: 220 }, (code) => {
-      closeModal();
-      handleScannedCode(code.trim());
-    }).catch(err => alert("Kamera-Fehler (HTTPS erforderlich): " + err));
-  }, 150);
+  if (db.users.length === 0) {
+    alert("Bitte zuerst unter 'Nutzer' mindestens einen Benutzer registrieren.");
+    return;
+  }
+
+  const fallbackButtons = db.tokens.map(t =>
+    `<button class="btn btn-outline btn-sm" style="margin:4px;" onclick="closeModal(); handleScannedCode('${t.code}');">${t.label}</button>`
+  ).join("");
+
+  openModal(`
+    <h3>QR-Chip scannen</h3>
+    <div id="qr-reader" style="width:100%; min-height:260px; background:#000; border-radius:12px; overflow:hidden;"></div>
+    <p id="cam-status" style="font-size:12px; color:var(--sub); text-align:center; margin-top:8px;">Kamera wird gestartet...</p>
+    <div style="margin-top:10px; text-align:center;">
+      <span style="font-size:12px; color:var(--sub);">Oder Chip direkt wählen:</span><br>
+      ${fallbackButtons}
+    </div>
+    <button class="btn btn-outline" style="margin-top:12px;" onclick="closeModal()">Abbrechen</button>
+  `);
+
+  setTimeout(async () => {
+    const statusEl = document.getElementById("cam-status");
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (statusEl) statusEl.textContent = "Kamera-API nicht verfügbar (HTTPS erforderlich).";
+        return;
+      }
+
+      const devices = await Html5Qrcode.getCameras();
+      if (!devices || devices.length === 0) {
+        if (statusEl) statusEl.textContent = "Keine Kamera gefunden.";
+        return;
+      }
+
+      // Rückkamera bevorzugen
+      const backCam = devices.find(d => /back|rear|rück|environment/i.test(d.label)) || devices[devices.length - 1];
+      html5Qr = new Html5Qrcode("qr-reader");
+
+      await html5Qr.start(
+        backCam.id,
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (code) => {
+          closeModal();
+          handleScannedCode(code.trim());
+        },
+        () => {}
+      );
+
+      // Wichtig für iOS Safari: playsinline erzwingen
+      const videoEl = document.querySelector("#qr-reader video");
+      if (videoEl) {
+        videoEl.setAttribute("playsinline", "true");
+        videoEl.setAttribute("muted", "true");
+      }
+      if (statusEl) statusEl.textContent = "QR-Code vor die Kamera halten";
+    } catch (err) {
+      if (statusEl) {
+        statusEl.innerHTML = `<span style="color:var(--red);">Kamera blockiert: ${err}</span><br>Bitte in iOS unter Einstellungen → Safari → Kamera auf „Erlauben“ stellen.`;
+      }
+    }
+  }, 250);
 }
+
 
 function handleScannedCode(code) {
   const token = db.tokens.find(t => t.code === code);
